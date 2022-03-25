@@ -1,0 +1,246 @@
+Задание 1
+
+import base64
+from Crypto.Cipher import AES
+
+def aes128_decrypt(block, key):
+    if len(block) != 16:
+        return None
+    cipher = AES.new(key, AES.MODE_ECB)
+    return cipher.decrypt(block)
+
+key = b'YELLOW SUBMARINE'
+blocksize = 16
+res = []
+with open("1.txt", "r") as file:
+    text = file.read()
+    text = base64.b64decode(text)
+    for i in range(0, len(text), blocksize):
+        block = text[i:i+blocksize]
+        string = str(aes128_decrypt(block, key))[2:-1]
+        print(f'{str(string)}', end='')
+=============================================================================================================================
+
+
+Задание 2
+В файле 2.txt находится несколько шифротекстов. Один из них был зашифрован в режиме ECB. Найдите его.
+Помните, в чем основная проблема режима ECB? Одинаковые 16 байт открытого текста дают одинаковые 16 байт шифротекста.
+
+n = 0
+chunksize = 32
+with open("2.txt", "r") as file:
+    for line in file.read().split():
+        n += 1
+        chunk = [line[i:i+chunksize] for i in range(0, len(line), chunksize)]
+        for i, ch in enumerate(chunk):
+            count = chunk.count(ch)
+            if count > 1:
+                print(n, i, ch)
+=============================================================================================================================
+
+
+Задание 3
+Реализуйте PKCS#7 паддинг, который будет дополнять блок до заданной длины. У вас должна получиться функция pkcs7_padding(block, target_length).
+Для примера, pkcs7_padding(“YELLOW SUBMARINE”, 20) вернет YELLOW SUBMARINE\x04\x04\x04\x04.
+
+def pkcs7_padding(block, target_length):
+    text = []
+    diff = bytes(target_length - len(block))
+    for i in block:
+        text.append(i)
+        if len(text) == len(block):
+            if len(block) < target_length:
+                text.append(str(diff)[2:-1])
+    plain = [str(i) for i in text]
+    plaintext = ''.join(plain)
+    return plaintext
+
+print(pkcs7_padding('YELLOW SUBMARINE', 20))
+============================================================================================================================
+
+
+Задание 4
+Реализуйте функции шифрования и дешифрования AES-128 в режиме CBC (используйте код из задания 1). Дешифруйте файл 4.txt с помощью ключа YELLOW SUBMARINE и вектора инициализации, состоящего из нулей \x00\x00\x00....
+http://cryptopals.com/sets/2/challenges/10
+
+
+import base64                                                                                                
+from Crypto.Cipher import AES                                                                                
+
+
+IV = '\x00' * 16
+mode = AES.MODE_CBC
+key = 'YELLOW SUBMARINE'
+cipher = AES.new(key, mode, IV)
+
+with open('4.txt', 'rb') as e:
+    encrypted_file = base64.b64decode(e.read())
+
+decrypted_file = cipher.decrypt(encrypted_file)
+print(decrypted_file)
+============================================================================================================================
+
+Задание 5
+К этому моменту у вас должны быть готовы ECB и CBC режимы AES.
+Напишите функцию, которая генерирует случайный ключ (16 байт из /dev/urandom).
+Напишите функцию, которая берет случайный ключ и шифрует с его помощью открытый текст. Функция будет выглядеть как encryption_oracle(your-input) и возвращать шифротекст.
+Также функция-оракул должна присоединять 5-10 (число выбирается случайно) рандомных байт перед открытым текстом и 5-10 рандомных байт после открытого текста.
+Пусть функция-оракул в половине случаев шифрует в режиме ECB, а в другой половине случаев в режиме CBC (режим выбирается случайным образом).
+Вам нужно написать программу, которая примет на вход шифротекст и будет способна определить какой из режимов шифрования был использован (ECB или CBC). Примечание: вы можете подавать на вход функции-оракула открытый текст произвольной длины.
+http://cryptopals.com/sets/2/challenges/11
+
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+
+
+def random_bytes(range):
+    with open("/dev/urandom", 'rb') as f:
+        return f.read(range)
+
+
+def encrypt_aes_ecb(data, key):
+    cipher = AES.new(key, AES.MODE_ECB)
+    ciphertext = cipher.encrypt(data)
+    return ciphertext
+
+
+def encrypt_aes_cbc(data, key, IV):
+    cipher = AES.new(key, AES.MODE_CBC, IV)
+    ciphertext = cipher.encrypt(data)
+    return ciphertext
+
+
+def encryption_oracle(data):
+    # Append a prefix and suffix to the data
+    prefix = random_bytes(len(range(5,11)))
+    suffix = random_bytes(len(range(5,11)))
+    data_to_encrypt = prefix + data + suffix
+    # Randomly determine the mode
+    mode = len(bin(int.from_bytes(random_bytes(1), 'little')))
+    if (mode) > 9:
+        mode = 'ECB'
+        ciphertext = encrypt_aes_ecb(pad(data_to_encrypt, blocksize), key)
+    else:
+        mode = 'CBC'
+        ciphertext = encrypt_aes_cbc(pad(data_to_encrypt, blocksize), key, IV)
+    print(f'Mode to encrypt: {mode}')
+    print(f'Total of bytes: {len(ciphertext)}')
+    return ciphertext
+
+
+def detect_encryption_mode(ciphertext):
+    n=0
+    c = 0
+    chunks = []
+    for i in range(0, len(ciphertext), blocksize):
+        chunks.append(ciphertext[i:i+blocksize])
+        n+=1
+    for num,ch in enumerate(chunks):
+        count = chunks.count(ch)
+        if count > 1:
+            print(num, ch)
+            c += 1
+    print(f'Total of chunks of {blocksize} bytes: {n}')
+    if  c > 1:
+        return 'ECB'
+    else:
+        return 'CBC'
+
+
+def main():
+    with open("open_text", "rb") as f:
+        data = f.read()
+    print(f'{len(data)} bytes')
+    encrypted_text = encryption_oracle(data)
+    detected_mode = detect_encryption_mode(encrypted_text)
+    print(f"Mode Detected: {detected_mode}")
+
+
+if __name__ == '__main__':
+    blocksize = AES.block_size
+    key = random_bytes(blocksize)
+    IV = random_bytes(blocksize)
+    main()
+============================================================================================================================
+
+
+Задание 6
+Модифицируйте функцию encryption_oracle из задания 5 так, чтобы она шифровала только в режиме ECB на случайном ключе, который остается одинаковым в пределах запуска программы (например, сделайте глобальную переменную KEY и берите значение из os.urandom).
+Функция будет добавлять к открытому тексту base64-декодированное значение (это нужно сделать до шифрования):
+
+Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
+aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
+dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
+YnkK
+Внимание! Не декодируйте это значение. Суть задания в том, что вы не знаете что внутри base64.
+В итоге ваша функция будет возвращать значение:
+AES-128-ECB(ваша-строка || неизвестная-строка, случайный-ключ)
+В такой схеме вы можете восстановить содержимое неизвестной строки, сделав несколько запросов к функции-ораклу! Алгоритм выглядит примерно так:
+
+Шаг 1. Узнайте размер блока (вы уже его знаете, но все равно выполните этот шаг). Для этого подавайте на вход строки из одинаковых байт, каждый раз добавляя по одному байте: “A”, “AA”, “AAA” и так далее. Подумайте о том, в какой момент вы сможете точно определить длину блока.
+
+Шаг 2. Поймите, что функция использует ECB режим шифрования. Вам это уже известно, но все равно выполните этот шаг.
+
+Шаг 3. Создайте блок данных, длина которого в точности на единицу меньше длины блока (например, если длина блока 8, то блок данных будет “AAAAAAA”). Задайтесь вопросом: что функция шифрования поставит на позицию последнего байта?
+
+Шаг 4. Подавайте на вход функции-оракула все возможные значения последнего байта (“AAAAAAAA”, “AAAAAAAB”, “AAAAAAAC” и так далее). Запомните первый блок каждого получившегося шифротекста.
+
+Шаг 5. Возьмите блок шифротекста из шага 3 и найдите его в списке из шага 4. Теперь вы знаете первый байт неизвестной строки.
+
+Шаг 6. Повторите алгоритм для второго и последующих байт.
+
+import string
+import base64
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+
+
+def random_bytes(range):
+    with open("/dev/urandom", 'rb') as f:
+        return f.read(range)
+
+
+def encrypt_aes_ecb(data, key):
+    cipher = AES.new(key, AES.MODE_ECB)
+    ciphertext = cipher.encrypt(data)
+    return ciphertext
+
+
+def encryption_oracle(data):
+    ciphertext = encrypt_aes_ecb(pad(data, blocksize), key)
+    return ciphertext
+
+
+def main():
+    char = 'A'
+    blocks = []
+    goodchars = ''
+    char_crack = ''
+    data = base64.b64decode('Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK')
+
+    for b in range(0, len(data), blocksize):
+        datablock = data[b:b+blocksize]
+        for i in range(1, blocksize+1):
+            length = blocksize-i
+            crack = char*length
+            char_crack = encryption_oracle(crack.encode('ascii') + datablock)
+            crack += goodchars
+            blocks.append(char_crack[:blocksize])
+            for j in range(0, len(string.printable)):
+                chars = string.printable[j]
+                iter_crack = (crack + chars).encode('ascii')
+                decoded_crack = encryption_oracle(iter_crack + datablock)
+                for k in range(0, len(string.printable)):
+                    block = decoded_crack[k:blocksize]
+                    if block in blocks:
+                        goodchars += chars
+            blocks.clear()
+        print(goodchars, end='')
+        goodchars = ''
+
+
+if __name__ == '__main__':
+    blocksize = AES.block_size
+    key = random_bytes(blocksize)
+    main()
